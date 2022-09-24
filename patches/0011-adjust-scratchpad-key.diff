@@ -1,0 +1,22 @@
+Index: dwm/config.def.h
+===================================================================
+--- dwm.orig/config.def.h
++++ dwm/config.def.h
+@@ -79,7 +79,7 @@ static Key keys[] = {
+ 	/* modifier                     key        function        argument */
+ 	{ MODKEY,                       XK_p,      spawn,          {.v = dmenucmd } },
+ 	{ MODKEY|ShiftMask,             XK_Return, spawn,          {.v = termcmd } },
+-	{ MODKEY,                       XK_grave,  togglescratch,  {.v = scratchpadcmd } },
++	{ MODKEY|ShiftMask,                       XK_h,  togglescratch,  {.v = scratchpadcmd } },
+ 	{ MODKEY,                       XK_b,      togglebar,      {0} },
+ 	{ MODKEY|ShiftMask,             XK_j,      rotatestack,    {.i = +1 } },
+ 	{ MODKEY|ShiftMask,             XK_k,      rotatestack,    {.i = -1 } },
+@@ -108,7 +108,7 @@ static Key keys[] = {
+ 	{ MODKEY|ShiftMask,             XK_period, tagmon,         {.i = +1 } },
+ 	{ MODKEY,                       XK_s,      show,           {0} },
+ 	{ MODKEY|ShiftMask,             XK_s,      showall,        {0} },
+-	{ MODKEY,                       XK_h,      hide,           {0} },
++	//{ MODKEY,                       XK_h,      hide,           {0} },
+ 	TAGKEYS(                        XK_1,                      0)
+ 	TAGKEYS(                        XK_2,                      1)
+ 	TAGKEYS(                        XK_3,                      2)
