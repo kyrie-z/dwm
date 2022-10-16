@@ -1,0 +1,196 @@
+Index: dwm/config.def.h
+===================================================================
+--- dwm.orig/config.def.h
++++ dwm/config.def.h
+@@ -72,6 +72,8 @@ static const Layout layouts[] = {
+ /* helper for spawning shell commands in the pre dwm-5.0 fashion */
+ #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
+ 
++#define STATUSBAR "dwmblocks"
++
+ /* commands */
+ static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
+ static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL };
+@@ -135,7 +137,9 @@ static Button buttons[] = {
+ 	{ ClkLtSymbol,          0,              Button3,        setlayout,      {.v = &layouts[2]} },
+ 	{ ClkWinTitle,          0,              Button1,        togglewin,      {0} },
+ 	{ ClkWinTitle,          0,              Button2,        zoom,           {0} },
+-	{ ClkStatusText,        0,              Button2,        spawn,          {.v = termcmd } },
++	{ ClkStatusText,        0,              Button1,        sigstatusbar,   {.i = 1} },
++	{ ClkStatusText,        0,              Button2,        sigstatusbar,   {.i = 2} },
++	{ ClkStatusText,        0,              Button3,        sigstatusbar,   {.i = 3} },
+ 	{ ClkClientWin,         MODKEY,         Button1,        movemouse,      {0} },
+ 	{ ClkClientWin,         MODKEY,         Button2,        togglefloating, {0} },
+ 	{ ClkClientWin,         MODKEY,         Button3,        resizemouse,    {0} },
+Index: dwm/dwm.c
+===================================================================
+--- dwm.orig/dwm.c
++++ dwm/dwm.c
+@@ -207,6 +207,7 @@ static void focusstack(int inc, int vis)
+ static Atom getatomprop(Client *c, Atom prop);
+ static int getrootptr(int *x, int *y);
+ static long getstate(Window w);
++static pid_t getstatusbarpid();
+ static int gettextprop(Window w, Atom atom, char *text, unsigned int size);
+ static unsigned int getsystraywidth();
+ static void grabbuttons(Client *c, int focused);
+@@ -252,6 +253,7 @@ static void showall(const Arg *arg);
+ static void showwin(Client *c);
+ static void showhide(Client *c);
+ static void sigchld(int unused);
++static void sigstatusbar(const Arg *arg);
+ static void spawn(const Arg *arg);
+ static Monitor *systraytomon(Monitor *m);
+ static void tag(const Arg *arg);
+@@ -296,6 +298,9 @@ static const char broken[] = "broken";
+ static const char dwmdir[] = "dwm";
+ static const char localshare[] = ".local/share";
+ static char stext[256];
++static int statusw;
++static int statussig;
++static pid_t statuspid = -1;
+ static int screen;
+ static int sw, sh;           /* X display screen geometry width, height */
+ static int bh, blw = 0;      /* bar geometry */
+@@ -491,6 +496,7 @@ buttonpress(XEvent *e)
+ 	Client *c;
+ 	Monitor *m;
+ 	XButtonPressedEvent *ev = &e->xbutton;
++	char *text, *s, ch;
+ 
+ 	click = ClkRootWin;
+ 	/* focus monitor if necessary */
+@@ -516,9 +522,23 @@ buttonpress(XEvent *e)
+ 		} else if (ev->x < x + blw)
+ 			click = ClkLtSymbol;
+ 		/* 2px right padding */
+-		else if (ev->x > selmon->ww - TEXTW(stext) - getsystraywidth() + lrpad - 2)
++		else if (ev->x > selmon->ww - getsystraywidth() - statusw){
++			x = selmon->ww - getsystraywidth() - statusw;
+ 			click = ClkStatusText;
+-		else {
++			statussig = 0;
++			for (text = s = stext; *s && x <= ev->x; s++) {
++				if ((unsigned char)(*s) < ' ') {
++					ch = *s;
++					*s = '\0';
++					x += TEXTW(text) - lrpad;
++					*s = ch;
++					text = s + 1;
++					if (x >= ev->x)
++						break;
++					statussig = ch;
++				}
++			}
++		} else{
+ 			x += blw;
+ 			c = m->clients;
+ 
+@@ -854,9 +874,24 @@ drawbar(Monitor *m)
+ 
+ 	/* draw status first so it can be overdrawn by tags later */
+ 	if (m == selmon) { /* status is only drawn on selected monitor */
++		char *text, *s, ch;
+ 		drw_setscheme(drw, scheme[SchemeNorm]);
+-		tw = TEXTW(stext) - lrpad + 2; /* 2px right padding */
+-		drw_text(drw, m->ww - tw - stw, 0, tw, bh, 0, stext, 0);
++
++		x = 0;
++		for (text = s = stext; *s; s++) {
++			if ((unsigned char)(*s) < ' ') {
++				ch = *s;
++				*s = '\0';
++				tw = TEXTW(text) - lrpad;
++				drw_text(drw, m->ww - stw - statusw + x, 0, tw, bh, 0, text, 0);
++				x += tw;
++				*s = ch;
++				text = s + 1;
++			}
++		}
++		tw = TEXTW(text) - lrpad + 2;
++		drw_text(drw, m->ww - stw - statusw + x, 0, tw, bh, 0, text, 0);
++		tw = statusw;
+ 	}
+ 
+ 	for (c = m->clients; c; c = c->next) {
+@@ -1112,6 +1147,31 @@ getatomprop(Client *c, Atom prop)
+ 	return atom;
+ }
+ 
++pid_t
++getstatusbarpid()
++{
++	char buf[32], *str = buf, *c;
++	FILE *fp;
++
++	if (statuspid > 0) {
++		snprintf(buf, sizeof(buf), "/proc/%u/cmdline", statuspid);
++		if ((fp = fopen(buf, "r"))) {
++			fgets(buf, sizeof(buf), fp);
++			while ((c = strchr(str, '/')))
++				str = c + 1;
++			fclose(fp);
++			if (!strcmp(str, STATUSBAR))
++				return statuspid;
++		}
++	}
++	if (!(fp = popen("pidof -s "STATUSBAR, "r")))
++		return -1;
++	fgets(buf, sizeof(buf), fp);
++	pclose(fp);
++	return strtol(buf, NULL, 10);
++}
++
++
+ int
+ getrootptr(int *x, int *y)
+ {
+@@ -2191,6 +2251,21 @@ sigchld(int unused)
+ }
+ 
+ void
++sigstatusbar(const Arg *arg)
++{
++	union sigval sv;
++
++	if (!statussig)
++		return;
++	sv.sival_int = arg->i;
++	if ((statuspid = getstatusbarpid()) <= 0)
++		return;
++
++	sigqueue(statuspid, SIGRTMIN+statussig, sv);
++}
++
++
++void
+ spawn(const Arg *arg)
+ {
+ 	if (arg->v == dmenucmd)
+@@ -2628,8 +2703,25 @@ updatesizehints(Client *c)
+ void
+ updatestatus(void)
+ {
+-	if (!gettextprop(root, XA_WM_NAME, stext, sizeof(stext)))
++	if (!gettextprop(root, XA_WM_NAME, stext, sizeof(stext))) {
+ 		strcpy(stext, "dwm-"VERSION);
++		statusw = TEXTW(stext) - lrpad + 2;
++	} else {
++		char *text, *s, ch;
++
++		statusw  = 0;
++		for (text = s = stext; *s; s++) {
++			if ((unsigned char)(*s) < ' ') {
++				ch = *s;
++				*s = '\0';
++				statusw += TEXTW(text) - lrpad;
++				*s = ch;
++				text = s + 1;
++			}
++		}
++		statusw += TEXTW(text) - lrpad + 2;
++
++	}
+ 	drawbar(selmon);
+ }
+ 
