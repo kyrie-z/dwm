@@ -1,0 +1,35 @@
+Index: dwm/config.def.h
+===================================================================
+--- dwm.orig/config.def.h
++++ dwm/config.def.h
+@@ -27,7 +27,7 @@ static const char *colors[][3]      = {
+ 	/*               fg         bg         border   */
+ 	[SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
+ 	[SchemeSel]  = { col_gray4, col_gray5,  col_cyan  },
+-	[SchemeHid]  = { col_gray4, col_gray5,  col_cyan  },
++	[SchemeHid]  = { "#000000", col_gray1,  col_cyan  },
+ };
+ static const unsigned int alphas[][3]      = {
+ 	/*               fg      bg        border     */
+@@ -78,7 +78,7 @@ static const Layout layouts[] = {
+ 
+ /* commands */
+ static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
+-static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL };
++static const char *dmenucmd[] = { "rofi", "-show", "drun", NULL };
+ static const char *termcmd[]  = { "st", NULL };
+ static const char scratchpadname[] = "scratchpad";
+ static const char *scratchpadcmd[] = { "st", "-t", scratchpadname, "-g", "120x34", NULL };
+Index: dwm/dwm.c
+===================================================================
+--- dwm.orig/dwm.c
++++ dwm/dwm.c
+@@ -923,7 +923,7 @@ drawbar(Monitor *m)
+ 				if (!ISVISIBLE(c))
+ 					continue;
+ 				if (m->sel == c)
+-					scm = SchemeHid;
++					scm = SchemeSel;
+ 				else if (HIDDEN(c))
+ 					scm = SchemeHid;
+ 				else
